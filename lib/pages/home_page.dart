@@ -26,6 +26,7 @@ GlobalKey<FormState> _key = GlobalKey();
   String _contrasena;
   String mensaje = '';
   bool isAuthBiometric = false;
+  String nameBiometry = '';
 
   @override
   void initState() { 
@@ -36,12 +37,14 @@ GlobalKey<FormState> _key = GlobalKey();
   }
 
   Widget build(BuildContext context) {
+    getNameBiometry();
+    
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
       statusBarColor: Colors.white, //or set color with: Color(0xFF0000FF)
     ));
 
     if (isAuthBiometric) {
-       tryAuth();
+       _authenticate();
     }
 
     return Scaffold(
@@ -156,10 +159,13 @@ final prefs =  PreferenciasUsuario();
                     if (_key.currentState.validate()) {
                       _key.currentState.save();
                       //Aqui se llamaria a su API para hacer el login
-                      
-                
-                        final biometric = await getNameBiometry();
-                        _mostrarAlerta(context, biometric);           
+                      getNameBiometry();
+                if (nameBiometry.isEmpty) {
+                    Navigator.of(context).pushReplacementNamed('menu');
+                } else {
+                    
+                    _mostrarAlerta(context, nameBiometry);  
+                }         
                      //  _getListOfBiometricTypes();
                     }
                   },
@@ -170,42 +176,48 @@ final prefs =  PreferenciasUsuario();
                   ),
                 );
   }
-  void tryAuth() async {
-   try {
+    Future<void> _authenticate() async {
+    try {
       didAuthenticate = await localAuth.authenticateWithBiometrics(
-      localizedReason: 'Please authenticate to show account balance');
-      if (didAuthenticate) {
+          localizedReason: 'Scan your fingerprint to authenticate',
+          useErrorDialogs: true,
+          stickyAuth: true);
+           if (didAuthenticate) {
         final prefs =  PreferenciasUsuario();
         prefs.authBiometric = true;
         Navigator.of(context).pushReplacementNamed('menu');
       }
+
     } on PlatformException catch (e) {
-     if (e.code == auth_error.notAvailable) {
-      // Handle this exception here.
-     }
-      }
+      print(e);
+    }
+   //  if (!mounted) return;
   }
 
-  Future<String> getNameBiometry() async {
-    List<BiometricType> availableBiometrics =
+  Future getNameBiometry() async {
+  List<BiometricType> availableBiometrics =
     await localAuth.getAvailableBiometrics();
-
+    // bool canCheckBiometrics = await localAuth.canCheckBiometrics;
     if (Platform.isIOS) {
-    if (availableBiometrics.contains(BiometricType.face)) {
+      if (availableBiometrics.contains(BiometricType.face)) {
         // Face ID.
-        return 'Face ID';
-    } else if (availableBiometrics.contains(BiometricType.fingerprint)) {
+         nameBiometry = 'Face ID';
+       } else if (availableBiometrics.contains(BiometricType.fingerprint)) {
         // Touch ID.
-        return 'Touch ID';
-    }
+         nameBiometry = 'Touch ID';
+         }
     } else {
-      return '';
+      if (availableBiometrics.contains(BiometricType.fingerprint)) {
+        // Face ID.
+        nameBiometry = 'Huella';
+       }
     }  
+   // if (!canCheckBiometrics) nameBiometry = '';
   }
 
   _mostrarAlerta(BuildContext context, String nameBiometric) {
 
-    final icon = Icon(nameBiometric != 'Touch ID' ? Icons.face : Icons.fingerprint, size: 70.0, color: Colors.blue,);
+    final icon = Icon(nameBiometric == 'Face ID' ? Icons.face : Icons.fingerprint, size: 70.0, color: Colors.blue,);
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -232,9 +244,9 @@ final prefs =  PreferenciasUsuario();
              ),
             FlatButton(
               
-              onPressed: () { 
+              onPressed: () async { 
               Navigator.of(context).pop();
-              tryAuth();
+              await _authenticate();
             },
              child: Text('Si')
              ),
